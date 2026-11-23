@@ -1,0 +1,30 @@
+# Local variables for `bun run dev` (wrangler dev). Copy this file to .dev.vars,
+# which git ignores. On a deployed Worker use `wrangler secret put <NAME>` instead.
+
+# Required. Signs sessions and every token. At least 32 characters, or the API
+# answers 503. Generate one with: openssl rand -hex 32
+SESSION_SECRET=
+
+# Optional. Key for /entra#k=<key> and the X-Admin-Key header of /api/summary.
+# At least 32 characters, or no key is accepted.
+ADMIN_KEY=
+
+# Global admins, separated by commas, semicolons or spaces. On an instance with
+# no admin yet, the first sign-in of a listed address creates the admin.
+ADMIN_EMAILS=you@example.com
+
+# Local development only. With no RESEND_API_KEY, a sign-in request returns the
+# link and the 6-digit code in its response, and only when the request's host is
+# localhost, 127.0.0.1 or [::1]. Never set it on a deployed Worker.
+PINNA_DEV_MODE=1
+
+# Leave it empty to use dev mode. With a key, real emails are sent.
+RESEND_API_KEY=
+
+# Optional.
+# PINNA_FROM_EMAIL="Pinna <noreply@example.com>"
+# PINNA_PUBLIC_URL=http://localhost:8787
+# ALERT_EMAIL=ops@example.com
+# PINNA_EMAIL_DAILY_CAP=80
+# PINNA_SHOT_ASSET_ORIGINS=https://cdn.example.com
+# PINNA_PROXY_ENABLED=1

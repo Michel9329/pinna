@@ -1,0 +1,35 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Node runs the build script (npx esbuild); Wrangler requires Node 22 or newer.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Worker dependencies
+        run: bun install --frozen-lockfile
+      - name: Install app dependencies
+        run: bun install --frozen-lockfile
+        working-directory: app
+      - name: Type check (Worker)
+        run: bun run typecheck
+      - name: Type check (app)
+        run: bun run typecheck
+        working-directory: app
+      - name: Unit tests
+        run: bun test
+      - name: Build
+        run: bun run build
+      # The browser tests (bun run test:e2e) are not run here: they need three
+      # browsers, openssl and a local Worker. See README.md, "Tests".

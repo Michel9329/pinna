@@ -1,0 +1,136 @@
+# Pinna - Cloudflare Worker configuration
+name = "pinna"
+main = "worker/index.ts"
+compatibility_date = "2026-05-01"
+# nodejs_compat: required by @cloudflare/puppeteer (Browser Run), which
+# imports node:buffer/node:*. Additive: it adds the Node polyfills and removes
+# none of the Workers APIs already in use (hono/D1/R2/KV).
+compatibility_flags = ["nodejs_compat"]
+# The *.workers.dev endpoint is disabled, so the only entry point is the custom
+# domain below (no second origin, no CORS mismatch, no search-engine indexing
+# of a duplicate host).
+workers_dev = false
+
+# Custom domain: the host where your Pinna instance lives.
+[[routes]]
+pattern = "pinna.example.com"
+custom_domain = true
+
+[observability]
+enabled = true
+
+# Data retention. Daily cron (03:00 UTC) -> scheduled() in worker/index.ts:
+# deletes expired magic_links (they hold plain-text emails) and admin_audit
+# rows older than 90 days. It only runs after `wrangler deploy` (additive, it
+# does not touch fetch).
+[triggers]
+crons = ["0 3 * * *"]
+
+# D1: after `wrangler d1 create pinna`, paste the database_id here.
+# migrations_dir: versioned migrations via `wrangler d1 migrations` (tracked
+# automatically in the d1_migrations table). Only the top-level .sql files in
+# migrations/ are migrations.
+# Usage: bun run db:migrate (remote) / db:migrate:local. Rule: additive,
+# nullable ALTERs, never a table rebuild; apply the migration BEFORE deploying
+# the Worker that uses it.
+[[d1_databases]]
+binding = "DB"
+database_name = "pinna"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Static assets: the build of the Vue app (app/dist), served by the Worker.
+[assets]
+directory = "./app/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# The Worker runs BEFORE the asset fallback, so browser navigations to /api/*
+# (magic links, previews) reach the Worker instead of being caught by the SPA
+# fallback that serves index.html.
+run_worker_first = true
+
+# Non-secret variables.
+#
+# Instance configuration: the code contains no hard-coded address. Without
+# ADMIN_EMAILS the admin roles stay as they are in the DB (no new admin, no
+# demotion, /entra does not sign anyone in), no alert is sent and email links
+# use the request origin. Emails are better set as secrets
+# (wrangler secret put <NAME>), so they do not end up in the repo;
+# PINNA_PUBLIC_URL can live here.
+#   ADMIN_EMAILS     = "you@example.com, partner@example.com"  # global admins, recomputed on every request (separators , ; spaces); /entra: the first one that is already admin
+#   ALERT_EMAIL      = "ops@example.com"                       # recipient of the alerts (error spikes, digest)
+#   PINNA_PUBLIC_URL = "https://pinna.example.com"             # links and logo in the emails
+[vars]
+# Email sender. Without the variable the sender is
+# "Pinna <onboarding@resend.dev>", which Resend accepts only towards the email
+# of your own Resend account: to email your clients you need a domain verified
+# on Resend. Better as a secret, which survives deploys:
+#   new instance:      wrangler secret put PINNA_FROM_EMAIL  ->  Pinna <noreply@example.com>
+#   instance that had it here as a plain variable: a plain deploy removes the
+#   variable before the secret exists; upload the secret with the deploy
+#   instead, bun run deploy:secrets (README, "Deploying updates").
+# PINNA_FROM_EMAIL = "Pinna <noreply@example.com>"
+# Cap on the emails sent in the last 24 hours, sign-in and notifications
+# together (default 80 in the code, worker/notify.ts). Keep it below the daily
+# quota of your Resend plan, so that alerts still go out when the cap is hit.
+# PINNA_EMAIL_DAILY_CAP = "80"
+
+# Secrets (NOT here): set them with  wrangler secret put <NAME>
+#   SESSION_SECRET  - required, signs the session cookies
+#   RESEND_API_KEY  - required in production: without it /api/auth/request returns 503
+# Local development: put them in the .dev.vars file (gitignored). Only there,
+# if you need to sign in without email: PINNA_DEV_MODE=1 (link and code in the
+# response, ONLY on localhost/127.0.0.1; on a real domain it never applies).
+# `bun run dev` passes --local-upstream localhost:8787, otherwise wrangler dev
+# rewrites the host with the one of the route above and dev mode does not apply.
+
+# Local development: wrangler dev listens ONLY on 127.0.0.1. With
+# --local-upstream the host seen by the Worker is always localhost, so the dev
+# mode host check (isDevMode) cannot tell who comes from the local network:
+# without this constraint someone on the same Wi-Fi could sign in with anyone's
+# email (link and code in the response). Never --ip 0.0.0.0.
+[dev]
+ip = "127.0.0.1"
+port = 8787
+
+# Comment attachments: files on R2.
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "pinna-attachments"
+
+# KV RATE_LIMIT: holds only the alert counters (worker/alerts.ts). The request
+# limits live on D1 (rate_limits table, migration 0004) and on the ANON_RL
+# binding below.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Shield for the anonymous routes (sign-in, code, admin key): Workers Rate
+# Limiting binding, counts in memory per location without writing to storage
+# (no quota to exhaust). Approximate: the precise limits stay on D1.
+# limit/period must stay equal to ANON_LIMIT/ANON_PERIOD in
+# worker/rate-limit.ts. namespace_id: an integer you choose, unique in the
+# account.
+[[ratelimits]]
+name = "ANON_RL"
+namespace_id = "20261106"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+# Per-user shield for authenticated users: same kind of binding, key = user id,
+# in front of every route that writes (userShield in worker/rate-limit.ts).
+# limit/period equal to USER_LIMIT/USER_PERIOD.
+[[ratelimits]]
+name = "USER_RL"
+namespace_id = "20261107"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60
+
+# Browser Run, formerly Browser Rendering (headless Chrome), for the real server-side screenshot,
+# used by /api/projects/:slug/shot via @cloudflare/puppeteer.
+[browser]
+binding = "BROWSER"

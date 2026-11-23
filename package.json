@@ -1,0 +1,31 @@
+{
+  "name": "pinna",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted visual feedback for websites: reviewers pin comments on a staging site, the team answers and marks them done. Cloudflare Workers, D1, R2 and Vue.",
+  "license": "MIT",
+  "author": "Michel Dimitri",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --local-upstream localhost:8787",
+    "build": "node scripts/build.mjs",
+    "deploy": "wrangler d1 migrations apply pinna --remote && node scripts/build.mjs && wrangler deploy",
+    "deploy:secrets": "wrangler d1 migrations apply pinna --remote && node scripts/build.mjs && wrangler deploy --secrets-file .deploy-secrets.env",
+    "typecheck": "tsc",
+    "test": "bun test",
+    "db:migrate": "wrangler d1 migrations apply pinna --remote",
+    "db:migrate:local": "wrangler d1 migrations apply pinna --local",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.1.0",
+    "hono": "^4.12.27",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4",
+    "@playwright/test": "1.60.0",
+    "typescript": "^5",
+    "wrangler": "^4.107.0"
+  }
+}
